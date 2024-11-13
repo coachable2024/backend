@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
+import openai
 import os
 from typing import List
 import instructor
