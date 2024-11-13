@@ -2,6 +2,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
+from datetime import date
+from pydantic import Field
+from enum import Enum
 import openai
 import os
 from typing import List
@@ -24,20 +27,25 @@ app = FastAPI(
 class Question(BaseModel):
     question: str
 
+class Answer(BaseModel):
+    answer: str
+
+class TaskStatus(Enum):
+    NOT_STARTED = "Not Started"
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
+
 class Task(BaseModel):
-    description: str
-    start_date: str
-    end_date: str
-    status: str
+    description: str = Field(description="The description of the task")
+    start_date: date = Field(description="The start date of the task")
+    end_date: date = Field(description="The end date of the task")
+    status: TaskStatus = Field(description="The status of the task")
 
 class Goal(BaseModel):
     description: str
-    start_date: str
-    end_date: str
-    tasks: List[Task]
-
-class Answer(BaseModel):
-    answer: str
+    start_date: date = Field(description="The start date of the goal")
+    end_date: date = Field(description="The end date of the goal")
+    tasks: List[Task] = Field(description="The tasks associated with the goal")
 
 @app.post("/generate-answer/", response_model=Answer)
 async def generate_answer(question_data: Question):
