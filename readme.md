@@ -21,7 +21,7 @@ python -m venv .venv
 ```
 pip install -r requirements.txt
 ```
-Also, make sure to set up the environment variables in the `.env` file， including
+Also, make sure to set up the environment variables in the `.env` file，including
 ```
 OPENAI_API_KEY=<your openai api key>
 ```
@@ -30,3 +30,5 @@ OPENAI_API_KEY=<your openai api key>
 ```
 python main.py
 ```
+
+4. The API will be hosted at `http://localhost:8000/docs`.
