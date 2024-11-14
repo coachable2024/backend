@@ -9,6 +9,7 @@ import openai
 import os
 from typing import List
 import instructor
+import json
 # Load environment variables
 load_dotenv()
 
@@ -29,6 +30,7 @@ class Question(BaseModel):
 
 class Answer(BaseModel):
     answer: str
+
 
 class TaskStatus(Enum):
     NOT_STARTED = "Not Started"
@@ -72,14 +74,25 @@ async def generate_answer(question_data: Question):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
-
-def extract_structured_data(question: str):
-    # Extract structured data from natural language
-    return client.chat.completions.create(
+@app.post("/generate-answer-structured-output/", response_model=Answer)
+async def generate_answer(question_data: Question):
+    try:
+        # Call OpenAI API
+        response = instructor_client.chat.completions.create(
         model="gpt-4o-mini",
         response_model=Goal,
-        messages=[{"role": "user", "content": question}],
-)
+        messages=[{"role": "user", "content": question_data.question}],
+)      
+        # Extract the generated answer
+        answer = json.loads(response)
+        
+        return {"answer": answer}
+    
+    except openai.APIError as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
