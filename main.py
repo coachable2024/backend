@@ -1,14 +1,23 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from openai import OpenAI
+from datetime import date
+from pydantic import Field
+from enum import Enum
 import openai
 import os
-
+from typing import List
+import instructor
+import json
 # Load environment variables
 load_dotenv()
 
 # Initialize OpenAI client
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Patch the OpenAI client
+instructor_client = instructor.from_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
 
 app = FastAPI(
     title="Question Answering API",
@@ -21,6 +30,24 @@ class Question(BaseModel):
 
 class Answer(BaseModel):
     answer: str
+
+
+class TaskStatus(Enum):
+    NOT_STARTED = "Not Started"
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
+
+class Task(BaseModel):
+    description: str = Field(description="The description of the task")
+    start_date: date = Field(description="The start date of the task")
+    end_date: date = Field(description="The end date of the task")
+    status: TaskStatus = Field(description="The status of the task")
+
+class Goal(BaseModel):
+    description: str
+    start_date: date = Field(description="The start date of the goal")
+    end_date: date = Field(description="The end date of the goal")
+    tasks: List[Task] = Field(description="The tasks associated with the goal")
 
 @app.post("/generate-answer/", response_model=Answer)
 async def generate_answer(question_data: Question):
@@ -45,6 +72,27 @@ async def generate_answer(question_data: Question):
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+
+@app.post("/generate-answer-structured-output/", response_model=Answer)
+async def generate_answer(question_data: Question):
+    try:
+        # Call OpenAI API
+        response = instructor_client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_model=Goal,
+        messages=[{"role": "user", "content": question_data.question}],
+)      
+        # Extract the generated answer
+        answer = json.loads(response)
+        
+        return {"answer": answer}
+    
+    except openai.APIError as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
