@@ -1,27 +1,28 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from dotenv import load_dotenv
-from openai import OpenAI
-from datetime import date
-from pydantic import Field
-from enum import Enum
-import openai
 import os
-from typing import List
-import instructor
 import json
+from typing import List
+from enum import Enum
+from datetime import date
+from pydantic import BaseModel, Field
+
+import openai
+import instructor
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+
+from metadata import coachName2systemPrompt
+
 # Load environment variables
+
 load_dotenv()
 
 # Initialize OpenAI client
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Patch the OpenAI client
-instructor_client = instructor.from_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
+instructor_client = instructor.from_openai(client)
 
 app = FastAPI(
-    title="Question Answering API",
-    description="API that generates answers using OpenAI's GPT model",
+    title="Coachable API",
+    description="Backend API for Coachable APP",
     version="1.0.0"
 )
 
@@ -30,7 +31,6 @@ class Question(BaseModel):
 
 class Answer(BaseModel):
     answer: str
-
 
 class TaskStatus(Enum):
     NOT_STARTED = "Not Started"
@@ -49,6 +49,7 @@ class Goal(BaseModel):
     end_date: date = Field(description="The end date of the goal")
     tasks: List[Task] = Field(description="The tasks associated with the goal")
 
+## Sample endpoint for reference, not used in the app, will be removed 
 @app.post("/generate-answer/", response_model=Answer)
 async def generate_answer(question_data: Question):
     try:
@@ -93,6 +94,30 @@ async def generate_answer(question_data: Question):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
+## TODO: work in progress
+@app.post("/goal_setting/", response_model=Answer)
+async def goal_setting(user_id: str, coach_name: str):
+    try:
+        
+        response = client.chat.completions.create(
+            model="gpt-4-turbo-preview",  # or any other available model
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content":''}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        # Extract the generated answer
+        answer = response.choices[0].message.content
+        
+        return Answer(answer=answer)
+    
+    except openai.APIError as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
