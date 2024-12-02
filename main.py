@@ -3,6 +3,7 @@ import json
 from typing import List
 from enum import Enum
 from datetime import date
+import pandas as pd
 
 import openai
 import instructor
@@ -64,6 +65,15 @@ class TaskStatus(Enum):
     IN_PROGRESS = "In Progress"
     COMPLETED = "Completed"
 
+class GoalCategory(Enum):
+    HABIT = "Habit"
+    PROJECT = "Project"
+
+class GoalStatus(Enum):
+    ACTIVE = "Active"
+    COMPLETED = "Completed"
+    INACTIVE = "Inactive"
+
 class Task(BaseModel):
     id: str = Field(description="The id of the task")
     title: str = Field(description="The title of the task")
@@ -72,14 +82,28 @@ class Task(BaseModel):
     updated_at: str = Field(description="The date the task was last updated")
     created_at: str = Field(description="The date the task was created")
     priority: str = Field(description="The priority of the task")
+    start_date: str = Field(description="The start date of the task")
     due_date: str = Field(description="The due date of the task")
+    start_time: str = Field(description="The daily start time of the task")
+    end_time: str = Field(description="The daily end time of the task")
+    duration: str = Field(description="The interval of the task")
 
 class Goal(BaseModel):
-    user_id: str = Field(description="The user id of the goal")
-    description: str
-    start_date: str = Field(description="The start date of the goal")
-    end_date: str = Field(description="The end date of the goal")
+    id: str = Field(description="The id of the goal")
+    title: str = Field(description="The title of the goal")
     tasks: List[Task] = Field(description="The tasks associated with the goal")
+    motivation: str = Field(description="The motivation of the goal")
+    status: GoalStatus = Field(description="The status of the goal")
+    category: GoalCategory = Field(description="The category of the goal")
+    user_id: str = Field(description="The user id of the goal")
+    description: str = Field(description="The description of the goal")
+    created_at: str = Field(description="The start date of the goal")
+    completed_date: str = Field(description="The end date of the goal")
+    target_date: str = Field(description="The target date of the goal")
+    updated_at: str = Field(description="The end date of the goal")
+    reward: str = Field(description="The reward of the goal")
+    progress: float = Field(description="The progress of the goal")
+    confirmed: bool = Field(description="Whether the goal is confirmed")
 
 # Add this date serializer class
 class DateEncoder(json.JSONEncoder):
@@ -87,6 +111,10 @@ class DateEncoder(json.JSONEncoder):
         if isinstance(obj, date):
             return obj.isoformat()
         if isinstance(obj, TaskStatus):
+            return obj.value
+        if isinstance(obj, GoalStatus):
+            return obj.value
+        if isinstance(obj, GoalCategory):
             return obj.value
         return super().default(obj)
 
@@ -126,8 +154,8 @@ async def generate_answer(request_body: ChatInput):
     messages=[{"role": "system", 
                 "content": """You are Luna, a warm and understanding coach who focuses on supportive and \
             nurturing guidence, good at emotional support, work-life balance, and personal growth.
-            You are helping a user: {user_id} set a goal and create tasks to achieve it. Tag the information users provided.
-            When you tag Enum values, use the value, not the enum.
+            You are helping a user: {user_id} set a goal and create tasks to achieve it. 
+            Tag the goal and tasks you create for this user in the response. Tasks cannot be an empty list.
             """.format(user_id=user_id)},
             {"role": "user", "content": user_input}],
 )       
@@ -135,17 +163,14 @@ async def generate_answer(request_body: ChatInput):
     answer_json = response.dict()
     for task in answer_json['tasks']:
         task['status'] = task['status'].value
-    print(answer_json)
-    with open("goal.json", "w") as json_file:
-        json.dump(answer_json, json_file, indent=4)
-    with open("task.json", "w") as json_file:
-        json.dump(answer_json['tasks'], json_file, indent=4)
-    user_id = "123"
-    goal_result = duckdb.sql("SELECT * FROM 'goal.json'")
-    task_result = duckdb.sql("SELECT * FROM 'task.json'")
-    print(goal_result)
-    print(task_result)
 
+    answer_json['status'] = answer_json['status'].value
+    answer_json['category'] = answer_json['category'].value
+
+    with open("goal_temp.json", "w") as json_file:
+        json.dump(answer_json, json_file, indent=4)
+    with open("task_temp.json", "w") as json_file:
+        json.dump(answer_json['tasks'], json_file, indent=4)
     # response to user
     history = request_body.history
     if len(history) == 0:
@@ -162,7 +187,7 @@ async def generate_answer(request_body: ChatInput):
                     Here is the goal you set for the user: {goal_result}
                     Here are the tasks you created for the user: {task_result}
                     Ask user if they would like to add, remove or edit any tasks.
-                    """.format(user_input=user_input, goal_result=goal_result, task_result=task_result)})
+                    """.format(user_input=user_input, goal_result=answer_json, task_result=answer_json['tasks'])})
     history.append({"role": "user", "content": request_body.user_input})
     
     try:
@@ -184,11 +209,37 @@ async def generate_answer(request_body: ChatInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-@app.post("/get_goal/")
-async def get_goal(request_body: ChatInput):
-    user_id = request_body.user_id
-    result = duckdb.sql("SELECT * FROM 'example.json' where user_id == {}".format(user_id))
-    return result
+@app.get("/get_goal/")
+async def get_goal():
+    user_id = "123"
+    # goal_result = duckdb.sql("SELECT * FROM 'goal_temp.json' where user_id == {}".format(user_id))
+    # task_result = duckdb.sql("SELECT * FROM 'task_temp.json' where user_id == {}".format(user_id))
+    # add data to duckdb
+    conn = duckdb.connect()
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS tasks AS
+    SELECT * FROM read_json_auto(?)
+    """, ['task_temp.json'])
+    
+    # Verify data loaded
+    df = conn.execute("SELECT * FROM tasks").fetchdf()
+    print("Existing Data:")
+    print(df)
+    # temp_goals = pd.read_json("goal_temp.json", lines=True)
+    temp_tasks = pd.read_json("task_temp.json")
+    print(temp_tasks)
+    print("temp_tasks:")
+    print(temp_tasks.values.tolist())
+    conn.execute("""
+        INSERT INTO tasks (id, title, description, status, updated_at, created_at, priority, start_date, due_date, start_time, end_time, duration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, temp_tasks.values.tolist())
+
+    print("New users inserted successfully.")
+
+    df_updated = conn.execute("SELECT * FROM tasks").fetchdf()
+    print(df_updated)
+    return df_updated
 
 ## TODO: integrate with frontend and test 
 @app.post("/goal_setting_chat/", response_model=AnswerWithHistory)
