@@ -14,16 +14,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from metadata import coachName2startingHistory
 
-import redis
 import duckdb
 
-pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
-rd = redis.Redis(connection_pool=pool)
 # Load environment variables
 load_dotenv()
 
 # Initialize OpenAI client
-client = openai.OpenAI(api_key="")
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 instructor_client = instructor.from_openai(client)
 MODEL = "gpt-4o-mini" # or any other available model
 
