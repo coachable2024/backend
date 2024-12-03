@@ -6,3 +6,5 @@ __pycache__/
 env/
 venv/
 ENV/
+goal_temp.json
+task_temp.json
