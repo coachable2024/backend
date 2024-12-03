@@ -23,7 +23,7 @@ rd = redis.Redis(connection_pool=pool)
 load_dotenv()
 
 # Initialize OpenAI client
-client = openai.OpenAI(api_key="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")
+client = openai.OpenAI(api_key="")
 instructor_client = instructor.from_openai(client)
 MODEL = "gpt-4o-mini" # or any other available model
 
