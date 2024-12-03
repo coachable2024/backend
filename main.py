@@ -79,10 +79,9 @@ class Task(BaseModel):
     updated_at: str = Field(description="The date the task was last updated")
     created_at: str = Field(description="The date the task was created")
     priority: str = Field(description="The priority of the task")
-    start_date: str = Field(description="The start date of the task")
     due_date: str = Field(description="The due date of the task")
-    start_time: str = Field(description="The daily start time of the task")
-    end_time: str = Field(description="The daily end time of the task")
+    start_date_time: str = Field(description="The start date time of the task")
+    end_date_time: str = Field(description="The end date time of the task")
     duration: str = Field(description="The interval of the task")
 
 class Goal(BaseModel):
