@@ -26,7 +26,21 @@ Also, make sure to set up the environment variables in the `.env` file，includi
 ```
 OPENAI_API_KEY=<your openai api key>
 ```
+3. Set up redis
+```
+brew update
 
+brew install redis
+
+redis-server --version 
+
+brew services start redis
+
+redis-cli ping, you should be able to see PONG
+
+if you need to stop redis:
+brew services stop redis
+```
 3. Run the server
 ```
 python main.py
