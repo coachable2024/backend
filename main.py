@@ -79,9 +79,6 @@ class ChatInput(BaseModel):
     coach_name: str
     history: List[HistoryRecord] = Field(default_factory=list)
 
-class AnswerWithHistory(BaseModel):
-    answer: str
-    history: List[HistoryRecord]
 
 class TaskStatus(Enum):
     NOT_STARTED = "Not Started"
@@ -127,7 +124,11 @@ class Goal(BaseModel):
     completed_date: Optional[str] = Field(default=None, description="The end date of the goal")
     # updated_at: str = Field(description="The end date of the goal")
     progress: Optional[float] = Field(default=None, description="The percentage progress of the goal")
-    
+
+class AnswerWithHistory(BaseModel):
+    answer: str
+    history: List[HistoryRecord]
+    goal: Optional[Goal]
 
 class WorkFlowManager(BaseModel):
     goal: Goal = Goal()
@@ -150,17 +151,26 @@ class DateEncoder(json.JSONEncoder):
 @app.post("/goal_setting_chat/", response_model=AnswerWithHistory)
 async def generate_answer(request_body: ChatInput):
     user_input = request_body.user_input
-    #Hello, I'd like to set a goal to finish reading my coding book, start from dec, 10, 2024, end at jan, 10, 2025
     user_id = 'test123'
+    
+    # Get data from Redis
     workflow_data_dict = await redis_client.get(user_id)
-    workflow_data_dict = json.loads(workflow_data_dict)
-    print("---saved data---")
+    print("----------Workflow_data----------")
     print(workflow_data_dict)
+    
+    # Initialize workflow_data
     workflow_data = WorkFlowManager()
-    if workflow_data_dict is None:
-        workflow_data = WorkFlowManager()
-    else:
-        workflow_data = WorkFlowManager(**workflow_data_dict)
+    
+    # Only try to parse JSON if we got data from Redis
+    if workflow_data_dict is not None:
+        try:
+            workflow_data_dict = json.loads(workflow_data_dict)
+            workflow_data = WorkFlowManager(**workflow_data_dict)
+        except json.JSONDecodeError:
+            # Handle invalid JSON data
+            workflow_data = WorkFlowManager()
+    
+    # Set basic properties
     workflow_data.goal.user_id = user_id
     workflow_data.goal.id = 'goal1'
     workflow_data.goal.created_at = date.today().strftime("%Y-%m-%d")
@@ -178,7 +188,7 @@ async def generate_answer(request_body: ChatInput):
             Step 1: communicate with the client about what their goal is and clarify as needed. Tag the goal title and description in this step.
             Step 2: discuss with the client the reward and motivation of the goal.
             Step 3: discuss with the client their timeframe to achieve the goal. Tag the goal target date in this step.
-            Step 4: After user confirm the goal they want to set, it is your task to break down the goal into concrete and actionable tasks. Tag the tasks in this step, it cannot be an empty list.
+            Step 4: After user confirm the goal they want to set, it is your task to break down the goal into concrete and actionable tasks. Tag the tasks in this step, it cannot be an empty list.Tag all the fields of tasks, especially any fields related to the time.
             Tag the goal and tasks you create for this user in the response. Tasks cannot be an empty list.
             """},
             {"role": "user", "content": user_input}],
@@ -248,10 +258,10 @@ async def generate_answer(request_body: ChatInput):
         print(str(e))
         answer = 'wrong'
     print('all goood now')
-    print(workflow_data.chat_history)
+    print(workflow_data)
     print(answer)
     # try:
-    return AnswerWithHistory(answer=answer, history=workflow_data.chat_history)
+    return AnswerWithHistory(answer=answer, history=workflow_data.chat_history, goal=workflow_data.goal)
     # except openai.APIError as e:
     #     raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
     # except Exception as e:
