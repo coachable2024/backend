@@ -21,7 +21,7 @@ import duckdb
 load_dotenv()
 
 # Initialize OpenAI client
-client = openai.OpenAI(api_key="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")
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 instructor_client = instructor.from_openai(client)
 MODEL = "gpt-4o" # or any other available model
 
