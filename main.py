@@ -20,7 +20,7 @@ import duckdb
 load_dotenv()
 
 # Initialize OpenAI client
-client = openai.OpenAI(api_key="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")
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 instructor_client = instructor.from_openai(client)
 MODEL = "gpt-4o" # or any other available model
 
@@ -52,16 +52,6 @@ redis_client = redis.Redis(
     password=REDIS_PASSWORD,
     decode_responses=True  # Automatically decode responses to strings
 )
-
-
-
-steps = [
-    "Step 1: communicate with the client about what their goal is and clarify as needed",
-    "Step 2: discuss with the client their timeframe to achieve the goal",
-    "Step 3: check whether the client has any habit routine or self-care demand they need to consider when working on the goal",
-    "Step 4: break down the goal into concrete and actionable tasks",
-    "Step 5: take into consideration other goals if any, habits and self-care demands, and arrange the clients' calendar by assigning the starting and ending date times for each task",
-]
 
 
 class Question(BaseModel):
@@ -103,10 +93,7 @@ class Task(BaseModel):
   preferred_time : Optional[str] = Field(default=None, description="The preferred time to do this task daily, the format should be '%H:%M'")
   duration: Optional[int] = Field(default=None, le = 24, ge = 0, description="The duration of this task, the unit is hour. ")
   completed_date: Optional[str] = Field(default=None, description="The dates that users complete this task.")
-#   scheduled_dates: Optional[str] = Field(default=None, description="The title of the habit")
   status: Optional[str] = Field(default='Active', description="The status of the task, can be active or inactive")
-#   created_at: Optional[str] = Field(default=None, description="The title of the habit")
-#   updated_at: Optional[str] = Field(default=None, description="The title of the habit")
   start_date:Optional[str] = Field(default=None, description="The start date of the task")
   end_date:  Optional[str] = Field(default=None, description="The end date of the task")
 
@@ -244,10 +231,12 @@ async def generate_answer(request_body: ChatInput):
     tasks = tagged_goal.get('tasks')
     habits = tagged_goal.get('habits')
     clear_chat = tagged_goal.get('clear_chat')
+    # clear the chat
     if clear_chat:
         workflow_data = WorkFlowManager()
         await redis_client.set(user_id, json.dumps(workflow_data.dict()))
         return AnswerWithHistory(answer='cleared', history=[], goal=None)
+
     for key, value in tagged_goal.items():
         if value is not None:
             if key not in  ['tasks', 'habits']:
