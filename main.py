@@ -1,9 +1,7 @@
 import os
 import json
-from typing import List, Optional, Any, Dict, Literal
-from enum import Enum
+from typing import List, Optional, Any
 from datetime import date
-import pandas as pd
 
 import uvicorn
 import openai
@@ -14,8 +12,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import redis.asyncio as redis
 from metadata import TaskExample, GoalExample, PlanExample
-
-import duckdb
+from src.schemas.goal.goal_models import Goal
+from src.services.goal_agent.goal_setting_agent import WorkFlowManager
 
 # Load environment variables
 load_dotenv()
@@ -23,7 +21,7 @@ load_dotenv()
 # Initialize OpenAI client
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 instructor_client = instructor.from_openai(client)
-MODEL = "gpt-4o" # or any other available model
+MODEL = "gpt-4o-mini" # or any other available model
 
 app = FastAPI(
     title="Coachable API",
@@ -70,107 +68,30 @@ class ChatInput(BaseModel):
     history: List[HistoryRecord] = Field(default_factory=list)
 
 
-
-class TaskStatus(Enum):
-    NOT_STARTED = "Not Started"
-    IN_PROGRESS = "In Progress"
-    COMPLETED = "Completed"
-
-class GoalCategory(Enum):
-    HABIT = "Habit"
-    PROJECT = "Project"
-
-class GoalStatus(Enum):
-    ACTIVE = "Active"
-    COMPLETED = "Completed"
-    INACTIVE = "Inactive"
-
-class Task(BaseModel):
-  id: Optional[str] = Field(default=None, description="The id of the task")
-  category: Literal["Goal_Related_Task"] = Field(description="This is a goal related task")
-  title: Optional[str] = Field(default=None, description="The title of the task")
-  description: Optional[str] = Field(default=None, description="The description of the task")
-  frequency : Optional[str] = Field(default='Daily', description="The frequency of the habit")
-  preferred_time : Optional[str] = Field(default=None, description="The preferred time to do this task daily, the format should be '%H:%M'")
-  duration: Optional[int] = Field(default=None, le = 24, ge = 0, description="The duration of this task, the unit is hour. ")
-  completed_date: Optional[str] = Field(default=None, description="The dates that users complete this task.")
-  status: Optional[str] = Field(default='Active', description="The status of the task, can be active or inactive")
-  start_date:Optional[str] = Field(default=None, description="The start date of the task")
-  end_date:  Optional[str] = Field(default=None, description="The end date of the task")
-
-
-class Habit(BaseModel):
-  id: Optional[str] = Field(default=None, description="The id of the habit")
-  category: Literal["Habit"] = Field(description="This is a habit")
-  title: Optional[str] = Field(default=None, description="The title of the habit")
-  description: Optional[str] = Field(default=None, description="The description of the habit")
-  frequency : Optional[str] = Field(default='Daily', description="The frequency of the habit")
-  preferred_time : Optional[str] = Field(default=None, description="The preferred time to do this habit daily, the format should be '%H:%M'")
-  duration: Optional[int] = Field(default=None, description="The duration of this task, the unit is hour.")
-  completed_dates: Optional[str] = Field(default=None, description="The dates that users complete this habit.")
-#   scheduled_dates: Optional[str] = Field(default=None, description="The title of the habit")
-  status: Optional[str] = Field(default='Active', description="The status of the habit")
-#   created_at: Optional[str] = Field(default=None, description="The title of the habit")
-#   updated_at: Optional[str] = Field(default=None, description="The title of the habit")
-  start_date:Optional[str] = Field(default=None, description="The start date of the habit")
-  end_date:  Optional[str] = Field(default=None, description="The end date of the habit")
-
-
-class Goal(BaseModel):
-    id: Optional[str] = Field(default=None, description="The id of the goal")
-    user_id: Optional[str] = Field(default=None, description="The user id of the user who set the goal")
-    # category: GoalCategory = Field(description="The category of the goal")
-    title: Optional[str] = Field(default=None, description="The title of the goal")
-    description: Optional[str] = Field(default=None, description="The description of the goal")
-    # reward: Optional[str] = Field(default=None, description="The reward of the goal")
-    # motivation: Optional[str] = Field(default=None, description="The motivation of the goal")
-    target_date: Optional[str] = Field(default=None, description="The target date of the goal")
-    hours_dedicated: Optional[int] = Field(default=None, description="How many hours a day dedicated to the goal")
-    confirm_goal: Optional[bool] = Field(default=None, description="Whether the goal is confirmed by user.")
-    add_habits: Optional[bool] = Field(default=None, description="Whether the user wants to add habits")
-    # temp_habit: Habit = Field(default=Habit(), description="Whether the user wants to add habits")
-    habits: Optional[List[Habit]] = Field(default=[], description="The habits or daily schedules user has")
-    confirm_habit: Optional[bool] = Field(default=None, description="Whether the habits are confirmed")
-    tasks: Optional[List[Task]] = Field(default=[], description="The tasks associated with the goal")
-    confirm_tasks: Optional[bool] = Field(default=None, description="Whether the tasks are confirmed by user")
-
-    # the rest will be tagged by user or constant
-    status: Optional[str] = Field(default=GoalStatus.ACTIVE.value, description="The status of the goal")
-    created_at: Optional[str] = Field(default=None, description="The start date of the goal")
-    completed_date: Optional[str] = Field(default=None, description="The end date of the goal")
-    # updated_at: str = Field(description="The end date of the goal")
-    progress: Optional[float] = Field(default=None, description="The percentage progress of the goal")
-    clear_chat :Optional[bool] = Field(default=None, description="Clear the chat")
-
-
 class AnswerWithHistory(BaseModel):
     answer: str
     history: List[HistoryRecord]
     goal: Optional[Goal]
 
-class WorkFlowManager(BaseModel):
-    goal: Goal = Goal()
-    chat_history: List[Any] = []
 
-# Add this date serializer class
-class DateEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, date):
-            return obj.isoformat()
-        if isinstance(obj, TaskStatus):
-            return obj.value
-        if isinstance(obj, GoalStatus):
-            return obj.value
-        if isinstance(obj, GoalCategory):
-            return obj.value
-        return super().default(obj)
+# # Add this date serializer class
+# class DateEncoder(json.JSONEncoder):
+#     def default(self, obj):
+#         if isinstance(obj, date):
+#             return obj.isoformat()
+#         if isinstance(obj, TaskStatus):
+#             return obj.value
+#         if isinstance(obj, GoalStatus):
+#             return obj.value
+#         if isinstance(obj, GoalCategory):
+#             return obj.value
+#         return super().default(obj)
 
 @app.post("/goal_setting_chat/", response_model=AnswerWithHistory)
 async def generate_answer(request_body: ChatInput):
     user_input = request_body.user_input
     user_id = 'test123'
     current_date = date.today()
-    
     # Get data from Redis
     workflow_data_dict = await redis_client.get(user_id)
     print("\n =========== Workflow_data STARTING STATUS ===========")
